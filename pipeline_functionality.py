@@ -60,4 +60,45 @@ class preprocess_training_validation:
             return scaled_df
             
 
+class feature_engineering:
+    def __init__(self):
+        self.feature1boundary = None
+        self.feature5boundary = None
+        self.feature10boundary = None
+    def feature0_fit_transform(self,df):
+        if (self.feature1boundary == None) and ("Feature1_Cat" not in df.columns.tolist()):
+            self.feature1boundary = df.loc[df["labels"] == 0]["Feature 1"].describe()["75%"] + 1.5*(df.loc[df["labels"] == 0]["Feature 1"].describe()["75%"] - df.loc[df["labels"] == 0]["Feature 1"].describe()["25%"])
+            df = self.apply_change(df,"Feature 1",{"LTE":"Low Risk","GT":"High Risk"},self.feature1boundary)
+            return df
+        else:
+            raise Warning("Feature 0 boundary to split categorical variable is already set. No change to the data was done")
+    def feature5_fit_transform(self,df):
+        if (self.feature5boundary == None) and ("Feature5_Cat" not in df.columns.tolist()):
+            self.feature5boundary = df.loc[df["labels"] == 1]["Feature 5"].describe()["75%"]
+            df = self.apply_change(df,"Feature 5",{"LTE":"High Risk","GT":"Low Risk"},self.feature5boundary)
+            # df.loc[df["Feature 5"] <= self.feature5boundary,'Feature5_Cat'] = "High Risk"
+            # df.loc[df["Feature 5"] > self.feature5boundary,'Feature5_Cat'] = "Low Risk"
+            return df
+        else:
+            raise Warning("Feature 5 boundary to split categorical variable is already set. No change to the data was done")
+    def feature10_fit_transform(self,df):
+        if (self.feature10boundary == None) and ("Feature10_Cat" not in df.columns.tolist()):
+            self.feature10boundary = df.loc[df["labels"] == 0]["Feature 10"].describe()["75%"]
+            df = self.apply_change(df,"Feature 10",{"LTE":"Low Risk","GT":"High Risk"},self.feature10boundary)
+            # df.loc[df["Feature 10"] <= self.feature10boundary,'Feature10_Cat'] = "Low Risk"
+            # df.loc[df["Feature 10"] > self.feature10boundary,'Feature10_Cat'] = "High Risk"
+            return df
+        else:
+            raise Warning("Feature 10 boundary to split categorical variable is already set. No change to the data was done")
+    #This function is used to transform the final dataframe to be used for cross validation and training
+    def transform_df(self,df):
+        df = self.apply_change(df,"Feature 1",{"LTE":"Low Risk","GT":"High Risk"},self.feature1boundary)
+        df = self.apply_change(df,"Feature 5",{"LTE":"High Risk","GT":"Low Risk"},self.feature5boundary)
+        df = self.apply_change(df,"Feature 10",{"LTE":"Low Risk","GT":"High Risk"},self.feature10boundary)
 
+    def apply_change(self,df,col,change_dict,boundary):
+        catcol = col + "_Cat"
+        df[catcol] = np.nan
+        df.loc[df[col] <= boundary,catcol] = change_dict["LTE"]
+        df.loc[df[col] > boundary,catcol] = change_dict["GT"]
+        return df
