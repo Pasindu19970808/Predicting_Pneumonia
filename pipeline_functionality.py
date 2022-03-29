@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
+from imblearn.over_sampling import SMOTE
 # def process_main(filepath):
 #     df = read_df(filepath)
 #     return df
@@ -12,9 +13,26 @@ class preprocess_data():
     def __init__(self,**kwargs):
         self.filepath = kwargs["filepath"]
 
-    def read_df(self):
+    def read_df(self,process_complete = False):
         df = pd.read_csv(self.filepath,encoding="ISO-8859-1")
         df.drop('id',axis = 1,inplace=True)
+        df = self.rename_columns(df)
+        if process_complete != False:
+            #drop na
+            df = df.dropna(subset=["Feature 0","Feature 1","Feature 10"])
+            df = df.reset_index(drop=True)
+            oversample = SMOTE()
+            df_train,df_label = oversample.fit_resample(df[[i for i in df.columns.tolist() if i!="label"]],df[[i for i in df.columns.tolist() if i=="label"]])
+            df_train["labels"] = df_label
+            df = df_train
+            #remove highly correlated features
+            df = df.drop(['Feature 3', 'Feature 4', 'Feature 7','Age','Sex'],axis = 1)
+            feature_eng = feature_engineering()
+            df = feature_eng.feature0_fit_transform(df)
+            df = feature_eng.feature5_fit_transform(df)
+            df = feature_eng.feature10_fit_transform(df)
+            df = df.drop(["Feature 1","Feature 5","Feature 10"],axis = 1)
+            df = pd.concat([df[[i for i in df.columns.tolist() if "_" not in i and i != "labels"]],pd.get_dummies(df[['Feature 1_Cat','Feature 5_Cat','Feature 10_Cat',]]),df[["labels"]]],axis = 1)
         return df
         # if split == True:
         #     df_labels = df.loc[:,"label"]
@@ -43,22 +61,13 @@ class preprocess_data():
 class preprocess_training_validation:
     def __init__(self):
         self.scaler = None
-    def normalize(self,df):
-        cols = [i for i in df.columns.tolist() if i != "Age" and i != "Sex"]
-        age_sex = df[["Age","Sex"]]
-        if self.scaler == None:
-            self.scaler = StandardScaler()
-            self.scaler.fit(df[cols])
-            scaled_data = self.scaler.transform(df[cols])
-            scaled_df = pd.DataFrame(scaled_data,columns=cols)
-            scaled_df[["Age","Sex"]] = age_sex
-            return scaled_df
-        else:
-            scaled_data = self.scaler.transform(df[cols])
-            scaled_df = pd.DataFrame(scaled_data,columns=cols)
-            scaled_df[["Age","Sex"]] = age_sex
-            return scaled_df
-            
+    def process(self,df):
+        df = df.drop(["Feature 1","Feature 5","Feature 10"],axis = 1)
+        columns = [i for i in df.columns.tolist() if "Feature" in i]
+        columns.append("labels")
+        df = df[columns]
+        df = pd.concat([df[[i for i in df.columns.tolist() if "_" not in i and i != "labels"]],pd.get_dummies(df[['Feature 1_Cat','Feature 5_Cat','Feature 10_Cat',]]),df[["labels"]]],axis = 1)
+        return df   
 
 class feature_engineering:
     def __init__(self):
