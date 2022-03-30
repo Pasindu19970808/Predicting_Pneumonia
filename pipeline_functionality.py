@@ -3,6 +3,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
+import torch
+from torch import nn
+from torch.utils.data import DataLoader
+from pydantic import BaseModel
+from typing import Dict,Tuple,List
+from pydantic import StrictStr,StrictInt
+from pydantic import ValidationError
 # def process_main(filepath):
 #     df = read_df(filepath)
 #     return df
@@ -12,7 +19,7 @@ from imblearn.over_sampling import SMOTE
 class preprocess_data():
     def __init__(self,**kwargs):
         self.filepath = kwargs["filepath"]
-
+        self.scaler = None
     def read_df(self,process_complete = False):
         df = pd.read_csv(self.filepath,encoding="ISO-8859-1")
         df.drop('id',axis = 1,inplace=True)
@@ -33,6 +40,9 @@ class preprocess_data():
             df = feature_eng.feature10_fit_transform(df)
             df = df.drop(["Feature 1","Feature 5","Feature 10"],axis = 1)
             df = pd.concat([df[[i for i in df.columns.tolist() if "_" not in i and i != "labels"]],pd.get_dummies(df[['Feature 1_Cat','Feature 5_Cat','Feature 10_Cat',]]),df[["labels"]]],axis = 1)
+            self.scaler = StandardScaler()
+            self.scaler.fit(df[["Feature 0","Feature 2","Feature 6"]])
+            df[["Feature 0","Feature 2","Feature 6"]] = self.scaler.transform(df[["Feature 0","Feature 2","Feature 6"]])
         return df
         # if split == True:
         #     df_labels = df.loc[:,"label"]
@@ -111,3 +121,23 @@ class feature_engineering:
         df.loc[df[col] <= boundary,catcol] = change_dict["LTE"]
         df.loc[df[col] > boundary,catcol] = change_dict["GT"]
         return df
+
+
+#Do validation of 
+class Type_Checks(BaseModel):
+    layer_info_dict : Dict[StrictInt,Tuple[StrictInt,StrictInt,StrictStr]]
+
+
+
+class NeuralNetwork(nn.Module):
+    def __init__(self,layer_info_dict):
+        """
+        - Takes in a dictionary where key is the layer number and the tuples are (input_shape,number_of_hidden_units_on_layer)
+        - The values are tuples of the form (input shape(int), number of hidden units in layer(int),activation function to use(string))
+        """
+        try:
+            Type_Checks(layer_info_dict = layer_info_dict)
+        except ValidationError as e:
+            raise Exception(e.json())
+
+
