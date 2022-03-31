@@ -1,3 +1,4 @@
+from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,7 +8,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from pydantic import BaseModel
-from typing import Dict,Tuple,List
+from typing import Dict,Tuple,List,Optional
 from pydantic import StrictStr,StrictInt
 from pydantic import ValidationError
 # def process_main(filepath):
@@ -123,7 +124,7 @@ class feature_engineering:
         return df
 
 
-#Do validation of 
+#Do validation of the tuple carrying the layer details
 class Type_Checks(BaseModel):
     layer_info_dict : Dict[StrictInt,Tuple[StrictInt,StrictInt,StrictStr]]
 
@@ -134,9 +135,24 @@ class NeuralNetwork(nn.Module):
         """
         - Takes in a dictionary where key is the layer number and the tuples are (input_shape,number_of_hidden_units_on_layer)
         - The values are tuples of the form (input shape(int), number of hidden units in layer(int),activation function to use(string))
+        - If an activation layer is not required
         """
+        self.activation_layers = {
+        'relu':nn.ReLU(),
+        'sigmoid':nn.Sigmoid(),
+        'tanh':nn.Tanh()
+        }
         try:
             Type_Checks(layer_info_dict = layer_info_dict)
+            super(NeuralNetwork,self).__init__()
+            layers = []
+            for layer in layer_info_dict:
+                layers.append(nn.Linear(in_features=layer[0],out_features=layer[1],bias = True))
+                if (layer[2] != None) and (layer[2] in list(self.activation_layers.keys())):
+                    layers.append(self.activation_layers[layer[2]])
+                else:
+                    raise Exception("Invalid Activation Layer name")
+            self.linear_stack = nn.Sequential(*layers)
         except ValidationError as e:
             raise Exception(e.json())
 
