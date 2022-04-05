@@ -155,5 +155,54 @@ class NeuralNetwork(nn.Module):
             self.linear_stack = nn.Sequential(*layers)
         except ValidationError as e:
             raise Exception(e.json())
+    def forward(self,x):
+        forward_prop = self.linear_stack(x)
+        return forward_prop
+
+
+
+class TrainingValidatingNetwork:
+    def train(self,dataloader,model,loss_fn,optimizer):
+        model.train()
+        for batch,(X,Y) in enumerate(dataloader):
+            pred = model(X)
+            loss = loss_fn(pred,Y)
+            optimizer.zero_grad()
+            optimizer.step()
+    def validate(self,dataloader,model,loss_fn,test = False):
+        model.eval()
+        testing_loss = 0
+        correct = 0
+        validate_inst_count = 0
+        with torch.no_grad():
+            for batch,(X,Y) in enumerate(dataloader):
+                y_pred = model(X)
+                loss = loss_fn(y_pred,Y)
+                testing_loss += loss.item()
+                validate_inst_count += 1
+                #y_pred.argmax(1) == y will return True or False
+                #as it is being tested one instance at a time,
+                #it will be one True or False
+                #.astype(torch.float) makes it to a 1 or 0
+                #As its one instance at a time, no need to sum
+                #output y_pred is of shape [1], y is of shape[]
+                correct += (y_pred.round() == Y).type(torch.float).item()
+        #calculate average loss across the batches
+        avg_loss = testing_loss/validate_inst_count
+        #calculate average accuracy across the batches
+        avg_accuracy = correct/validate_inst_count
+        return avg_loss,avg_accuracy
+    def train_and_validate(self,train_dataloader,validate_dataloader,model,loss_fn,learning_rate,epochs,optimizer):
+        self.optimizer = optimizer
+        for i in range(epochs):
+            self.train(train_dataloader,model,loss_fn,self.optimizer)
+        avg_accuracy,avg_loss = self.validate(validate_dataloader,model,loss_fn)
+        return avg_accuracy,avg_loss
+
+
+
+
+
+
 
 
