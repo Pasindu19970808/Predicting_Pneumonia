@@ -147,9 +147,9 @@ class NeuralNetwork(nn.Module):
             super(NeuralNetwork,self).__init__()
             layers = []
             for layer in layer_info_dict:
-                layers.append(nn.Linear(in_features=layer[0],out_features=layer[1],bias = True))
-                if (layer[2] != None) and (layer[2] in list(self.activation_layers.keys())):
-                    layers.append(self.activation_layers[layer[2]])
+                layers.append(nn.Linear(in_features=layer_info_dict[layer][0],out_features=layer_info_dict[layer][1],bias = True))
+                if (layer_info_dict[layer][2] != None) and (layer_info_dict[layer][2] in list(self.activation_layers.keys())):
+                    layers.append(self.activation_layers[layer_info_dict[layer][2]])
                 else:
                     raise Exception("Invalid Activation Layer name")
             self.linear_stack = nn.Sequential(*layers)
@@ -162,12 +162,15 @@ class NeuralNetwork(nn.Module):
 
 
 class TrainingValidatingNetwork:
+    def __init__(self):
+        pass
     def train(self,dataloader,model,loss_fn,optimizer):
         model.train()
         for batch,(X,Y) in enumerate(dataloader):
-            pred = model(X)
-            loss = loss_fn(pred,Y)
+            pred = model(X.float())
+            loss = loss_fn(pred,Y.unsqueeze(0).float())
             optimizer.zero_grad()
+            loss.backward()
             optimizer.step()
     def validate(self,dataloader,model,loss_fn,test = False):
         model.eval()
@@ -176,8 +179,8 @@ class TrainingValidatingNetwork:
         validate_inst_count = 0
         with torch.no_grad():
             for batch,(X,Y) in enumerate(dataloader):
-                y_pred = model(X)
-                loss = loss_fn(y_pred,Y)
+                y_pred = model(X.float())
+                loss = loss_fn(y_pred,Y.unsqueeze(0).float())
                 testing_loss += loss.item()
                 validate_inst_count += 1
                 #y_pred.argmax(1) == y will return True or False
@@ -192,7 +195,7 @@ class TrainingValidatingNetwork:
         #calculate average accuracy across the batches
         avg_accuracy = correct/validate_inst_count
         return avg_loss,avg_accuracy
-    def train_and_validate(self,train_dataloader,validate_dataloader,model,loss_fn,learning_rate,epochs,optimizer):
+    def train_and_validate(self,train_dataloader,validate_dataloader,model,loss_fn,epochs,optimizer):
         self.optimizer = optimizer
         for i in range(epochs):
             self.train(train_dataloader,model,loss_fn,self.optimizer)
