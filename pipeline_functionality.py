@@ -1,3 +1,5 @@
+from cgi import test
+from tkinter import E
 from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
@@ -11,61 +13,63 @@ from pydantic import BaseModel
 from typing import Dict,Tuple,List,Optional
 from pydantic import StrictStr,StrictInt
 from pydantic import ValidationError
-# def process_main(filepath):
-#     df = read_df(filepath)
-#     return df
 
-#Read data off csv file
 
 class preprocess_data():
     def __init__(self,**kwargs):
         self.filepath = kwargs["filepath"]
         self.scaler = None
-    def read_df(self,process_complete = False,test_df = False,test_path = ""):
+        self.eng_obj = None
+    def read_df(self,process_complete = False,test_df = False,feature_eng = False,oversampling = False,scaling=True, test_path = ""):
+        """
+        process_complete (bool) : To completely process the data including dropping NaN values, renaming the columns
+        test_df (bool) : If we are using the object on the testing data, the StandardScaler object which was applied to the training data will be used
+        feature_eng (bool) : If true, the intended Feature Engineering will be carried out as presented in the feature_engineering class
+        oversampling (bool) : If true, Synthetic Minority Oversampling Technique will be used to balance the data labels
+        scaling (bool) : If true, we will normalize the data by using z-scaling
+        test_path (str) : path to testing data
+        """
+        self.process_complete = process_complete
+        self.test_df = test_df
+        self.feature_eng = feature_eng
+        self.oversampling = oversampling
+        self.scaling = scaling
         if test_df == True:
             self.filepath = test_path
+
         df = pd.read_csv(self.filepath,encoding="ISO-8859-1")
         df.drop('id',axis = 1,inplace=True)
         df = self.rename_columns(df)
-        if process_complete != False:
+        if self.process_complete != False:
             #drop na
-            if test_df == False:
-                df = df.dropna(subset=["Feature 0","Feature 1","Feature 10"])
-                df = df.reset_index(drop=True)
-                # oversample = SMOTE()
-                # df_train,df_label = oversample.fit_resample(df[[i for i in df.columns.tolist() if i!="label"]],df[[i for i in df.columns.tolist() if i=="label"]])
-                # df_train["labels"] = df_label
-                # df = df_train
-                #remove highly correlated features
-                # df = df.drop(['Feature 3', 'Feature 4', 'Feature 7','Age','Sex'],axis = 1)
+            df = df.dropna(subset=["Feature 0","Feature 1","Feature 10"])
+            df = df.reset_index(drop=True)
+            if (self.oversampling == True) & (self.test_df == False):
+                df_features,df_labels = SMOTE().fit_resample(df[[i for i in df.columns.tolist() if i != "label"]],df[['label']])
+                df = pd.concat([df_features,df_labels],axis = 1)
 
-                self.feature_eng = feature_engineering()
-                df = self.feature_eng.feature0_fit_transform(df)
-                df = self.feature_eng.feature5_fit_transform(df)
-                df = self.feature_eng.feature10_fit_transform(df)
-            else:
-                df = self.feature_eng.transform_df(df)
-            df.loc[df["Sex"] == 1,"Sex"] = "M"
-            df.loc[df["Sex"] == 0,"Sex"] = "F"
-            #works for training df and not test df
-            try:
-                df = pd.concat([df[[i for i in df.columns.tolist() if "_" not in i and i != "labels"]],pd.get_dummies(df[['Feature 1_Cat','Feature 5_Cat','Feature 10_Cat',"Sex"]]),df[["labels"]]],axis = 1)
-            except:
-                #works for test df
-                df = pd.concat([df[[i for i in df.columns.tolist() if "_" not in i and i != "labels"]],pd.get_dummies(df[['Feature 1_Cat','Feature 5_Cat','Feature 10_Cat',"Sex"]])],axis = 1)
-            df = df.drop(["Feature 1","Feature 5","Feature 10","Sex"],axis = 1)
-
-            if test_df == False:
+            #feature engineer
+            if self.feature_eng == True:
+                df = self.engineer_features(df)
+                df = df.drop(["Feature 1","Feature 5","Feature 10"],axis = 1)
+            
+            if self.test_df == False and self.scaling == True:
                 self.scaler = StandardScaler()
-                self.scaler.fit(df[["Feature 0","Feature 2","Feature 6",'Feature 3', 'Feature 4', 'Feature 7','Age']])
-            df[["Feature 0","Feature 2","Feature 6",'Feature 3', 'Feature 4', 'Feature 7','Age']] = self.scaler.transform(df[["Feature 0","Feature 2","Feature 6",'Feature 3', 'Feature 4', 'Feature 7','Age']])
-        return df
+                self.cols_to_scale = [i for i in df.columns.tolist() if "_Cat" not in i and i != "Sex" and i != "label"]
+                self.scaler.fit(df[self.cols_to_scale])
         
-        # if split == True:
-        #     df_labels = df.loc[:,"label"]
-        #     df_train = df.loc[:,[i for i in df.columns.tolist() if i != "label"]]
-        #     return df_train,df_labels
-        # else:
+            if self.scaling == True:
+                df[self.cols_to_scale] = self.scaler.transform(df[self.cols_to_scale])
+        return df
+    def engineer_features(self,df):
+        if self.eng_obj == None:
+            self.eng_obj = feature_engineering()
+            df = self.eng_obj.feature0_fit_transform(df)
+            df = self.eng_obj.feature5_fit_transform(df)
+            df = self.eng_obj.feature10_fit_transform(df)
+        else:
+            df = self.eng_obj.transform_df(df)
+        return df
 
     #Rename columns for easier reading
     def rename_columns(self,df:pd.DataFrame):
@@ -131,10 +135,11 @@ class feature_engineering:
         df = self.apply_change(df,"Feature 10",{"LTE":"Low Risk","GT":"High Risk"},self.feature10boundary)
         return df
     def apply_change(self,df,col,change_dict,boundary):
+        cat_dict = {"Low Risk":int(0),"High Risk":int(1)}
         catcol = col + "_Cat"
         df[catcol] = np.nan
-        df.loc[df[col] <= boundary,catcol] = change_dict["LTE"]
-        df.loc[df[col] > boundary,catcol] = change_dict["GT"]
+        df.loc[df[col] <= boundary,catcol] = cat_dict[change_dict["LTE"]]
+        df.loc[df[col] > boundary,catcol] = cat_dict[change_dict["GT"]]
         return df
 
 
